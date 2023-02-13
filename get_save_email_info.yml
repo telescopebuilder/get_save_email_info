@@ -68,26 +68,42 @@
     debug:
       msg: "Hostname: {{ hostname_result.stdout }} \n OS: {{ os_result.stdout }} \n Version: {{ os_version_result.stdout }} \n Disk capacity: {{ disk_capacity_result.stdout }} \n Disk usage {{ disk_usage_result.stdout }} \n Total Memory: {{ total_memory_result.stdout }} \n SWAP Memory: {{ swap_memory_result.stdout }} \n IP Address: {{ ip_result.stdout }} \n MAC Address: {{ mac_result.stdout }} \n Java: {{ java_result.stdout }} \n MySQL:  {{ mysql_result.stdout }} \n Apache: {{ apache2_result.stdout }}"
 
+- name: Get Linux Host Information
+  hosts:
+  - ubuntu-test-srv-1
+  - ubuntu-test-srv-2
+  - ubuntu-test-srv-3
+  gather_facts: yes
+  tasks:
   - name: Fetch the file from remote node to buffer
     fetch:
       src: /tmp/{{ inventory_hostname }}_inventory_information.csv
       dest: /tmp/awx-host-info/{{ inventory_hostname }}_inventory_information.csv
       flat: yes
 
-  - name: Copy the file from buffer to remote node
-    delegate_to: andy-awxnode-test
-    copy:
-      src: /tmp/awx-host-info/{{ inventory_hostname }}_inventory_information.csv
-      dest: /tmp/awx-host-info/
+    - name: Copy the file from buffer to remote node
+      delegate_to: andy-awxnode-test
+      copy:
+        src: /tmp/awx-host-info/{{ inventory_hostname }}_inventory_information.csv
+        dest: /tmp/awx-host-info/
 
-  - name: Set first_inventory_file to take first header line from
-    set_fact:
-      first_inventory_file: "{{ first_inventory_file | default(inventory_hostname) }}"
+    - name: Set first_inventory_file to take first header line from
+      set_fact:
+        first_inventory_file: "{{ first_inventory_file | default(inventory_hostname) }}"
 
-  - name: Create the combined file, taking the first line only from the first_inventory_file
-    delegate_to: andy-awxnode-test
-    shell: "head -1 /tmp/awx-host-info/{{ first_inventory_file }}_inventory_information.csv > /tmp/combined-host-info/current_host_info.csv"
+    - name: Create the combined file, taking the first line only from the first_inventory_file
+      delegate_to: andy-awxnode-test
+      shell: "head -1 /tmp/awx-host-info/{{ first_inventory_file }}_inventory_information.csv > /tmp/combined-host-info/current_host_info.csv"
 
-  - name: Concatenate the files into one file, leaving out header line
-    delegate_to: andy-awxnode-test
-    shell: "tail -n +2 /tmp/awx-host-info/{{ inventory_hostname }}_inventory_information.csv >> /tmp/combined-host-info/current_host_info.csv"
+    - name: Concatenate the files into one file, leaving out header line
+      delegate_to: andy-awxnode-test
+      shell: "tail -n +2 /tmp/awx-host-info/{{ inventory_hostname }}_inventory_information.csv >> /tmp/combined-host-info/current_host_info.csv"
+
+- name: Send email with file attachment
+  hosts: andy-awxnode-test
+  gather_facts: no
+  become: yes
+  become_user: ansible_andy
+  tasks:
+    - name: Send email
+      shell: echo "This is the current host information." | sudo mail -s "Host info" -A /tmp/combined-host-info/current_host_info.csv -r "AnsibleAWX@fleetfarm.com" "andy.adolphson@fleetfarm.com"
